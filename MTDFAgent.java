@@ -46,13 +46,13 @@ public class MTDFAgent implements MancalaAgent{
   /**
    * Subclass to hold a move with its corresponding child state
    */
-  class MoveChild {
+  class MoveState {
     public int move;
-    public int[] child;
+    public int[] state;
 
-    public MoveChild(int move, int child) {
+    public MoveState(int move, int child) {
       this.move = move;
-      this.child = child;
+      this.child = state;
     }
   }
 
@@ -92,34 +92,34 @@ public class MTDFAgent implements MancalaAgent{
     return score;
   }
 
-  private ArrayList<int[]> children(int[] state, Ply step) {
-    ArrayList<int[]> childstates = new ArrayList<int[]>();
+  private ArrayList<MoveState> children(int[] state, Ply step) {
+    ArrayList<MoveState> childstates = new ArrayList<MoveState>();
 
     if (step == Ply.MAX) { //our moves
       for (int i = 0; i < 6; ++i) {
         if (state[i] > 0) {
           //move is valid
-          int[] newState = Arrays.copyOf(state, 14);
+          MoveState newState = MoveState(i, Arrays.copyOf(state, 14));
           //sow seeds from i
           int j = i;
           int seeds = state[i];
-          newState[i] = 0;
+          newState.state[i] = 0;
           while(seeds > 0) {
             ++j;
             j %= 14;
             if (j < 13) { //don't place in opponent store
               --seeds;
-              newState[j] += 1;
+              newState.state[j] += 1;
             }
           }
           if (j == 6) { //extra turn
             //recursively find children of this state
-            childstates.addAll(children(newState, Ply.MAX));
+            childstates.addAll(children(newState.state, Ply.MAX));
           } else {
-            if ((j >= 0) && (j <= 5) && (newState[j] == 1) && (newState[12-j] > 0)) { //empty house rule
-              newState[6] = newState[6] + newState[12-j] + 1;
-              newState[j] = 0;
-              newState[12-j] = 0;
+            if ((j >= 0) && (j <= 5) && (newState.state[j] == 1) && (newState.state[12-j] > 0)) { //empty house rule
+              newState.state[6] = newState.state[6] + newState.state[12-j] + 1;
+              newState.state[j] = 0;
+              newState.state[12-j] = 0;
             }
             childstates.add(newState);
           }
@@ -129,27 +129,27 @@ public class MTDFAgent implements MancalaAgent{
       for (int i = 7; i < 13; ++i) {
         if (state[i] > 0) {
           //move is valid
-          int[] newState = Arrays.copyOf(state, 14);
+          MoveState newState = new MoveState(i, Arrays.copyOf(state, 14));
           //sow seeds from i
           int j = i;
           int seeds = state[i];
-          newState[i] = 0;
+          newState.state[i] = 0;
           while(seeds > 0) {
             ++j;
             j %= 14;
             if (j < 6) { //don't place in our store
               --seeds;
-              newState[j] += 1;
+              newState.state[j] += 1;
             }
           }
           if (j == 13) { //extra turn rule
             //recursively find children of this state
-            childstates.addAll(children(newState, Ply.MAX));
+            childstates.addAll(children(newState.state, Ply.MAX));
           } else {
-            if ((j >= 7) && (j <= 12) && (newState[j] == 1) && (newState[12-j] > 0)) { //empty house rule
-              newState[13] = newState[13] + newState[12-j] + 1;
-              newState[j] = 0;
-              newState[12-j] = 0;
+            if ((j >= 7) && (j <= 12) && (newState.state[j] == 1) && (newState.state[12-j] > 0)) { //empty house rule
+              newState.state[13] = newState.state[13] + newState.state[12-j] + 1;
+              newState.state[j] = 0;
+              newState.state[12-j] = 0;
             }
             childstates.add(newState);
           }
@@ -249,9 +249,9 @@ public class MTDFAgent implements MancalaAgent{
       g = Integer.MIN_VALUE;
       a = alpha; //save original alpha value
 
-      for (int[] child : children(state, Ply.MAX)) {
+      for (MoveState child : children(state, Ply.MAX)) {
         if (g >= beta) break;
-        g = Math.max(g, alphaBetaWithMemory(child, a, beta, d - 1, Ply.MIN));
+        g = Math.max(g, alphaBetaWithMemory(child, a, beta, d - 1, Ply.MIN)); ////////// FIX THIS, MUST RETURN MoveScore -----------------------------------
         a = Math.max(a, g);
       }
 
@@ -259,7 +259,7 @@ public class MTDFAgent implements MancalaAgent{
       g = Integer.MAX_VALUE;
       b = beta; //save original beta value
 
-      for (int[] child : children(state, Ply.MIN)) {
+      for (MoveState child : children(state, Ply.MIN)) {
         if (g <= alpha) break;
         g = Math.min(g, alphaBetaWithMemory(child, alpha, b, d - 1, Ply.MAX));
         b = Math.min(b, g);
