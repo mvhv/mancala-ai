@@ -1,5 +1,7 @@
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Random;
+import java.util.HashMap;
 
 /**
  * CITS3001 - Lab 6
@@ -9,12 +11,54 @@ import java.util.Arrays;
  */
 public class MancalaImp implements MancalaAgent {
 
-  public enum MMStep {MAX, MIN};
+  /**
+   * Subclass for holding transposition table entries
+   */
+  class TransEntry {
+    public int depth;
+    public int alpha;
+    public int beta;
+
+    public TransEntry(int depth, int alpha, int beta) {
+      this.depth = depth;
+      this.alpha = alpha;
+      this.beta = beta;
+    }
+  }
+
+  private static enum MMStep {MAX, MIN};
+  private static int nSeeds = 12*3;
+  private long[][] zobristTable;
+  private HashMap<Long, TransEntry> transTable;
 
   /**
    * Creates an instance of the Mancala Agent
    */
-  public MancalaImp(){}
+  public MancalaImp(){
+    //gen bitstrings for zobrist hashing
+    Random randomGen = new Random();
+    this.zobristTable = new long[14][nSeeds + 1];
+    for (int i = 0; i < 14; ++i) {
+      for (int j = 0; j < nSeeds + 1; ++j) {
+        this.zobristTable[i][j] = randomGen.nextLong();
+      }
+    }
+
+    this.transTable = new HashMap<Long, TransEntry>();
+  }
+
+  /**
+   * Calculates the zobrist hash key for the current game state
+   * @param state the current state of the board
+   * @return the zobrist hash of the current game state
+   */
+  private long zobristKey(int[] state) {
+    long key = 0;
+    for (int i = 0; i < 14; ++i) {
+      key ^= zobristTable[i][state[i]];
+    }
+    return key;
+  }
 
   /**
    * Allows the agent to nominate the house the agent would like to move seeds from. 
@@ -161,7 +205,7 @@ public class MancalaImp implements MancalaAgent {
             //recursively find children of this state
             childstates.addAll(children(newState, MMStep.MAX));
           } else {
-            if ((j >= 0) && (j <= 5) && (newState.get(j) == 1) && (newState.get(12-j)) > 0) { //empty house rule
+            if ((j >= 0) && (j <= 5) && (newState.get(j) == 1) && (newState.get(12-j) > 0)) { //empty house rule
               newState.set(6, newState.get(6) + newState.get(12-j) + 1);
               newState.set(j, 0);
               newState.set(12-j, 0);
@@ -187,12 +231,12 @@ public class MancalaImp implements MancalaAgent {
               newState.set(j, newState.get(j) + 1);
             }
           }
-          if (j == 6) { //extra turn
+          if (j == 13) { //extra turn
             //recursively find children of this state
             childstates.addAll(children(newState, MMStep.MIN));
           } else {
             if ((j >= 7) && (j <= 12) && (newState.get(j) == 1) && (newState.get(12-j)) > 0) { //empty house rule
-              newState.set(6, newState.get(6) + newState.get(12-j) + 1);
+              newState.set(13, newState.get(13) + newState.get(12-j) + 1);
               newState.set(j, 0);
               newState.set(12-j, 0);
             }
