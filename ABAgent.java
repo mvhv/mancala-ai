@@ -9,9 +9,9 @@ import java.util.Arrays;
  */
 public class ABAgent implements MancalaAgent {
 
-  private enum Ply {MAX, MIN};
+  static enum Ply {MAX, MIN};
 
-  class MoveScore {
+  static class MoveScore {
     public int move;
     public int score;
 
@@ -21,7 +21,7 @@ public class ABAgent implements MancalaAgent {
     }
   }
 
-  class ChildMove {
+  static class ChildMove {
     public int move;
     public int[] state;
 
@@ -48,21 +48,44 @@ public class ABAgent implements MancalaAgent {
 
   private int evaluate(int[] state) {
     int score = 0;
-    for (int i = 0; i < 7; ++i) score += state[i];
-    for (int i = 7; i < 14; ++i) score -= state[i];
 
+    //check endgame conditions
     if (terminal(state)) {
+      for (int i = 0; i < 7; ++i) score += state[i];
+      for (int i = 7; i < 14; ++i) score -= state[i];
+
       if (score > 0) {
-        return Integer.MAX_VALUE;
+        return 100; //victory
       } else if (score < 0) {
-        return Integer.MIN_VALUE;
+        return -100; //loss
+      } else {
+        return 0; //draw
+      }
+    } else
+
+    //calculate board value
+    for (int i = 0; i < 6; ++i) {
+      if ((state[i] == 0) && (state[12-i] > 0)) { //empty house rule
+        score += state[12-i] / 2 + 1; //potential empty house captures are worth half
+      } else {
+        score += state[i]; //house seeds have standard value
       }
     }
+    score += 2*state[6]; //siloed seeds are double
+
+    for (int i = 7; i < 13; ++i) {
+      if ((state[i] == 0) && (state[12-i] > 0)) {
+        score -= state[12-i] / 2 + 1;
+      } else {
+        score -= state[i];
+      }
+    }
+    score -= 2*state[13];
 
     return score;
   }
 
-  private MoveScore alphaBeta(ChildMove move, int alpha, int beta, int depth, Ply step){
+  private MoveScore alphaBeta(ChildMove move, int alpha, int beta, int depth, Ply step) {
     //base case
     if ((depth == 0) || terminal(move.state)) {
       return new MoveScore(move.move, evaluate(move.state));
@@ -124,8 +147,11 @@ public class ABAgent implements MancalaAgent {
             }
           }
           if (j == 6) { //extra turn
-            //recursively find children of this state
-            childmoves.addAll(children(child, step, true));
+            if (terminal(child.state)) { //if move ends the game it can't give an extra turn
+              childmoves.add(child);
+            } else { //recursively find extra move children of this state
+              childmoves.addAll(children(child, step, true));
+            }
           } else {
             if ((j >= 0) && (j <= 5) && (child.state[j] == 1) && (child.state[12-j] > 0)) { //empty house rule
               child.state[6] = child.state[6] + child.state[12-j] + 1;
@@ -157,9 +183,12 @@ public class ABAgent implements MancalaAgent {
               child.state[j] += 1;
             }
           }
-          if (j == 13) { //extra turn rule
-            //recursively find children of this state
-            childmoves.addAll(children(child, step, true));
+          if (j == 13) { //extra turn
+            if (terminal(child.state)) { //if move ends the game it can't give an extra turn
+              childmoves.add(child);
+            } else { //recursively find extra move children of this state
+              childmoves.addAll(children(child, step, true));
+            }
           } else {
             if ((j >= 7) && (j <= 12) && (child.state[j] == 1) && (child.state[12-j] > 0)) { //empty house rule
               child.state[13] = child.state[13] + child.state[12-j] + 1;
@@ -191,7 +220,7 @@ public class ABAgent implements MancalaAgent {
   public int move(int[] board) {
     int alpha = Integer.MIN_VALUE;
     int beta = Integer.MAX_VALUE;
-    int depth = 10;
+    int depth = 12;
     ChildMove state = new ChildMove(-1, board);
     MoveScore best = alphaBeta(state, alpha, beta, depth, Ply.MAX);
     return best.move;

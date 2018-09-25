@@ -1,13 +1,14 @@
 import java.util.HashMap;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Random;
 
 /**
- * Basic Minimax search for Mancala
+ * Alpha-Beta Pruning search with memory for Mancala
  * 
  * OOP version for passing results
  */
-public class MMAgent implements MancalaAgent {
+public class ABWMAgent implements MancalaAgent {
 
   static enum Ply {MAX, MIN};
 
@@ -29,6 +30,44 @@ public class MMAgent implements MancalaAgent {
       this.move = move;
       this.state = state;
     }
+  }
+
+  static class TransEntry {
+    public int depth;
+    public int upperbound;
+    public int lowerbound;
+
+    public TransEntry() {
+      this.depth = 0;
+      this.upperbound = Integer.MAX_VALUE;
+      this.lowerbound = Integer.MIN_VALUE;
+    }
+  }
+
+  private HashMap<Long, TransEntry> transTable;
+  private long[][] zobristTable;
+  private int nSeeds = 3 * 12;
+
+  public ABWMAgent() {
+    //init zobrist table
+    Random prng = new Random();
+    zobristTable = new long[14][nSeeds + 1];
+    for (int i = 0; i < 14; ++i) {
+      for (int j = 0; j < nSeeds + 1; ++j) {
+        zobristTable[i][j] = prng.nextLong();
+      }
+    }
+
+    //init transposition table
+    transTable = new HashMap<Long, TransEntry>();
+  }
+
+  private long zobristHash(int[] state) {
+    long key = 0;
+    for (int i = 0; i < 14; ++i) {
+      key ^= zobristTable[i][state[i]];
+    }
+    return key;
   }
 
   private boolean terminal(int[] state) {
@@ -85,33 +124,76 @@ public class MMAgent implements MancalaAgent {
     return score;
   }
 
-  private MoveScore minimax(ChildMove move, int depth, Ply step) {
+  private MoveScore alphaBetaWithMemory(ChildMove move, int alpha, int beta, int depth, Ply step) {
+    int value, bestMove = 0;
+    MoveScore searchResult;
+    TransEntry trans;
+    long hash = zobristHash(move.state);
+    
+    //trans table lookup
+    if (transTable.containsKey(hash)) {
+      trans = transTable.get(hash);
+      if (trans.depth >= depth) {
+        if (trans.lowerbound >= beta) {
+          return new MoveScore(move.move, trans.lowerbound);
+        }
+        if (trans.upperbound <= alpha) {
+          return new MoveScore(move.move, trans.upperbound);
+        }
+        alpha = Math.max(alpha, trans.lowerbound);
+        beta = Math.min(beta, trans.upperbound);
+      }
+    }
+    
     //base case
     if ((depth == 0) || terminal(move.state)) {
       return new MoveScore(move.move, evaluate(move.state));
     }
 
-    int value, bestMove = 0;
-    MoveScore searchResult;
     //recursive
     if (step == Ply.MAX) { //max step
       value = Integer.MIN_VALUE;
       for (ChildMove child : children(move, Ply.MAX, false)) {
-        searchResult = minimax(child, depth - 1, Ply.MIN);
+        searchResult = alphaBetaWithMemory(child, alpha, beta, depth - 1, Ply.MIN);
         if (searchResult.score >= value) {
           value = searchResult.score;
           bestMove = child.move;
         }
+        alpha = Math.max(alpha, value);
+        if (alpha >= beta) break; //pruning
       }
     } else { //min step
       value = Integer.MAX_VALUE;
       for (ChildMove child : children(move, Ply.MIN, false)) {
-        searchResult = minimax(child, depth - 1, Ply.MAX);
+        searchResult = alphaBetaWithMemory(child, alpha, beta, depth - 1, Ply.MAX);
         if (searchResult.score <= value) {
           value = searchResult.score;
           bestMove = child.move;
         }
+        beta = Math.min(beta, value);
+        if (alpha >= beta) break;
       }
+    }
+
+    //store trans table values
+    trans = transTable.getOrDefault(hash, new TransEntry());
+
+    if (trans.depth <= depth) {
+      //fail low implies an upper bound
+      if (value <= alpha) {
+        trans.upperbound = value;
+      }
+      //fail high implies a lower bound
+      else if (value >= beta) {
+        trans.lowerbound = value;
+      }
+      //accurate minimax value
+      else {
+        trans.lowerbound = value;
+        trans.upperbound = value;
+      }
+      trans.depth = depth;
+      transTable.put(hash, trans);
     }
 
     return new MoveScore(bestMove, value);
@@ -214,7 +296,11 @@ public class MMAgent implements MancalaAgent {
    * @return the house the agent would like to move the seeds from this turn.
    */
   public int move(int[] board) {
-    MoveScore best = minimax(new ChildMove(-1, board), 8, Ply.MAX);
+    int alpha = Integer.MIN_VALUE;
+    int beta = Integer.MAX_VALUE;
+    int depth = 12;
+    ChildMove state = new ChildMove(-1, board);
+    MoveScore best = alphaBetaWithMemory(state, alpha, beta, depth, Ply.MAX);
     return best.move;
   }
 
@@ -223,7 +309,7 @@ public class MMAgent implements MancalaAgent {
    * @return a hardcoded string, the name of the agent.
    */
   public String name() {
-    return "Minimax Agent";
+    return "Alpha-Beta Memory Agent";
   }
 
   /**
