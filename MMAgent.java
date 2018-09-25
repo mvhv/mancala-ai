@@ -48,16 +48,39 @@ public class MMAgent implements MancalaAgent {
 
   private int evaluate(int[] state) {
     int score = 0;
-    for (int i = 0; i < 7; ++i) score += state[i];
-    for (int i = 7; i < 14; ++i) score -= state[i];
 
+    //check endgame conditions
     if (terminal(state)) {
+      for (int i = 0; i < 7; ++i) score += state[i];
+      for (int i = 7; i < 14; ++i) score -= state[i];
+
       if (score > 0) {
-        return Integer.MAX_VALUE;
+        return Integer.MAX_VALUE; //victory
       } else if (score < 0) {
-        return Integer.MIN_VALUE;
+        return Integer.MIN_VALUE; //loss
+      } else {
+        return 0; //draw
+      }
+    } else
+
+    //calculate board value
+    for (int i = 0; i < 6; ++i) {
+      if ((state[i] == 0) && (state[12-i] > 0)) { //empty house rule
+        score += state[12-i] / 2 + 1; //potential empty house captures are worth half
+      } else {
+        score += state[i]; //house seeds have standard value
       }
     }
+    score += 2*state[6]; //siloed seeds are double
+
+    for (int i = 7; i < 13; ++i) {
+      if ((state[i] == 0) && (state[12-i] > 0)) {
+        score -= state[12-i] / 2 + 1;
+      } else {
+        score -= state[i];
+      }
+    }
+    score -= 2*state[13];
 
     return score;
   }
@@ -94,7 +117,7 @@ public class MMAgent implements MancalaAgent {
     return new MoveScore(bestMove, value);
   }
 
-  public ArrayList<ChildMove> children(ChildMove parent, Ply step, boolean extraTurn) {
+  private ArrayList<ChildMove> children(ChildMove parent, Ply step, boolean extraTurn) {
     ArrayList<ChildMove> childmoves = new ArrayList<ChildMove>();
     ChildMove child;
 
@@ -156,11 +179,10 @@ public class MMAgent implements MancalaAgent {
               child.state[j] += 1;
             }
           }
-          if (j == 13) { //extra turn rule
-            //recursively find children of this state
-            if (terminal(child.state)) { //if move ends the game it can't have extra children
+          if (j == 13) { //extra turn
+            if (terminal(child.state)) { //if move ends the game it can't give an extra turn
               childmoves.add(child);
-            } else {
+            } else { //recursively find extra move children of this state
               childmoves.addAll(children(child, step, true));
             }
           } else {
