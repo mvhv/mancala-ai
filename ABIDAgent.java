@@ -309,16 +309,12 @@ public class ABIDAgent implements MancalaAgent {
     int depth = 1;
     ChildMove state = new ChildMove(-1, board);
     MoveScore best;
-    MoveScore current;
 
     this.searchStartTime = System.currentTimeMillis();
     best = alphaBetaWithMemory(state, alpha, beta, depth, Ply.MAX);
     while ((depth < MAX_SEARCH_DEPTH) && (!timeUp())) {
       ++depth;
-      current = alphaBetaWithMemory(state, alpha, beta, depth, Ply.MAX);
-      if (current.score >= best.score) {
-        best = current;
-      }
+      best = alphaBetaWithMemory(state, alpha, beta, depth, Ply.MAX);
     }
     return best.move;
   }

@@ -1,39 +1,20 @@
 import java.util.HashMap;
-import java.util.Random;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Random;
 
 /**
- * Implementation of MTD-f for mancala
- * Based on: http://people.csail.mit.edu/plaat/mtdf.html
+ * MTD-f search implementation for Mancala
+ * 
+ * CITS3001 Lab6
+ *
+ * Jesse Wyatt (20756971)
  */
-public class MTDFAgent implements MancalaAgent{
+public class MTDFAgent implements MancalaAgent {
 
-  /**
-   * Subclass for holding transposition table entries
-   */
-  class TransEntry {
-    public int depth;
-    public int upperbound;
-    public int lowerbound;
+  static enum Ply {MAX, MIN};
 
-    public TransEntry() {
-      this.depth = 0;
-      this.upperbound = Integer.MAX_VALUE;
-      this.lowerbound = Integer.MIN_VALUE;
-    }
-
-    public TransEntry(int depth, int upperbound, int lowerbound) {
-      this.depth = depth;
-      this.upperbound = upperbound;
-      this.lowerbound = lowerbound;
-    }
-  }
-
-  /**
-   * Subclass to hold a move with its minimax score
-   */
-  class MoveScore {
+  static class MoveScore {
     public int move;
     public int score;
 
@@ -43,31 +24,41 @@ public class MTDFAgent implements MancalaAgent{
     }
   }
 
-  /**
-   * Subclass to hold a move with its corresponding child state
-   */
-  class MoveState {
+  static class ChildMove {
     public int move;
     public int[] state;
 
-    public MoveState(int move, int[] state) {
+    public ChildMove(int move, int[] state) {
       this.move = move;
       this.state = state;
     }
   }
 
-  private static enum Ply {MAX, MIN};
-  private static int MAX_SEARCH_DEPTH = 10;
+  static class TransEntry {
+    public int depth;
+    public int upperbound;
+    public int lowerbound;
+
+    public TransEntry() {
+      this.depth = 0;
+      this.upperbound = 200;
+      this.lowerbound = -200;
+    }
+  }
+
+  private static int N_SEEDS = 3 * 12;
+  private static int MAX_SEARCH_DEPTH = 100;
+  private static long MAX_RUN_TIME = 100; //maximum runtime in milliseconds
   private HashMap<Long, TransEntry> transTable;
   private long[][] zobristTable;
-  private int nSeeds = 3 * 12;
+  private long searchStartTime;
 
   public MTDFAgent() {
     //init zobrist table
     Random prng = new Random();
-    zobristTable = new long[14][nSeeds + 1];
+    zobristTable = new long[14][N_SEEDS + 1];
     for (int i = 0; i < 14; ++i) {
-      for (int j = 0; j < nSeeds + 1; ++j) {
+      for (int j = 0; j < N_SEEDS + 1; ++j) {
         zobristTable[i][j] = prng.nextLong();
       }
     }
@@ -76,87 +67,37 @@ public class MTDFAgent implements MancalaAgent{
     transTable = new HashMap<Long, TransEntry>();
   }
 
-  private int evaluate(int[] state) {
-    int score = 0;
-    for (int i = 0; i < 7; ++i) score += state[i];
-    for (int i = 7; i < 14; ++i) score -= state[i];
+  private MoveScore MTDF(ChildMove state, int guess, int depth) {
+    int value, upperbound, lowerbound, beta;
+    MoveScore move = new MoveScore(-1, -1); //placeholder
 
-    if (terminal(state)) {
-      if (score > 0) {
-        return Integer.MAX_VALUE;
-      } else if (score < 0) {
-        return Integer.MIN_VALUE;
+    value = guess;
+    upperbound = Integer.MAX_VALUE;
+    lowerbound = Integer.MIN_VALUE;
+    while (lowerbound < upperbound) {
+      beta = Math.max(value, lowerbound + 1);
+      move = alphaBetaWithMemory(state, beta - 1, beta, depth, Ply.MAX);
+      value = move.score;
+      if (value < beta) {
+        upperbound = value;
+      } else {
+        lowerbound = value;
       }
     }
 
-    return score;
+    return move;
   }
 
-  private ArrayList<MoveState> children(int[] state, Ply step) {
-    ArrayList<MoveState> childstates = new ArrayList<MoveState>();
+  private boolean timeUp() {
+    return((System.currentTimeMillis() - searchStartTime) >= MAX_RUN_TIME);
+  }
 
-    if (step == Ply.MAX) { //our moves
-      for (int i = 0; i < 6; ++i) {
-        if (state[i] > 0) {
-          //move is valid
-          MoveState newState = new MoveState(i, Arrays.copyOf(state, 14));
-          //sow seeds from i
-          int j = i;
-          int seeds = state[i];
-          newState.state[i] = 0;
-          while(seeds > 0) {
-            ++j;
-            j %= 14;
-            if (j < 13) { //don't place in opponent store
-              --seeds;
-              newState.state[j] += 1;
-            }
-          }
-          if (j == 6) { //extra turn
-            //recursively find children of this state
-            childstates.addAll(children(newState.state, Ply.MAX));
-          } else {
-            if ((j >= 0) && (j <= 5) && (newState.state[j] == 1) && (newState.state[12-j] > 0)) { //empty house rule
-              newState.state[6] = newState.state[6] + newState.state[12-j] + 1;
-              newState.state[j] = 0;
-              newState.state[12-j] = 0;
-            }
-            childstates.add(newState);
-          }
-        }
-      }
-    } else { //enemy moves
-      for (int i = 7; i < 13; ++i) {
-        if (state[i] > 0) {
-          //move is valid
-          MoveState newState = new MoveState(i, Arrays.copyOf(state, 14));
-          //sow seeds from i
-          int j = i;
-          int seeds = state[i];
-          newState.state[i] = 0;
-          while(seeds > 0) {
-            ++j;
-            j %= 14;
-            if (j < 6) { //don't place in our store
-              --seeds;
-              newState.state[j] += 1;
-            }
-          }
-          if (j == 13) { //extra turn rule
-            //recursively find children of this state
-            childstates.addAll(children(newState.state, Ply.MAX));
-          } else {
-            if ((j >= 7) && (j <= 12) && (newState.state[j] == 1) && (newState.state[12-j] > 0)) { //empty house rule
-              newState.state[13] = newState.state[13] + newState.state[12-j] + 1;
-              newState.state[j] = 0;
-              newState.state[12-j] = 0;
-            }
-            childstates.add(newState);
-          }
-        }
-      }
+  private long zobristHash(int[] state) {
+    long key = 0;
+    for (int i = 0; i < 14; ++i) {
+      key ^= zobristTable[i][state[i]];
     }
-    return childstates;
+    return key;
   }
 
   private boolean terminal(int[] state) {
@@ -174,127 +115,214 @@ public class MTDFAgent implements MancalaAgent{
     return false;
   }
 
-  private long hash(int[] state) {
-    long key = 0;
-    for (int i = 0; i < 14; ++i) {
-      key ^= zobristTable[i][state[i]];
-    }
-    return key;
-  }
+  private int evaluate(int[] state) {
+    int score = 0;
 
-  private boolean timesUp() {
-    return false;
-  }
+    //check endgame conditions
+    if (terminal(state)) {
+      for (int i = 0; i < 7; ++i) score += state[i];
+      for (int i = 7; i < 14; ++i) score -= state[i];
 
-  private int MTDF(int[] root, int f, int d) {
-    int g, upperbound, lowerbound, beta;
-    
-    g = f;
-    upperbound = Integer.MAX_VALUE;
-    lowerbound = Integer.MIN_VALUE;
-
-    while (lowerbound < upperbound) {
-      if (g == lowerbound) {
-        beta = g + 1;
+      if (score > 0) {
+        return 100; //victory
+      } else if (score < 0) {
+        return -100; //loss
       } else {
-        beta = g;
+        return 0; //draw
       }
+    } else
 
-      //g = alphaBetaWithMemory(root, beta - 1, beta, d, Ply.MAX);
-
-      if (g < beta) {
-        upperbound = g;
+    //calculate board value
+    for (int i = 0; i < 6; ++i) {
+      if ((state[i] == 0) && (state[12-i] > 0)) { //empty house rule
+        score += state[12-i] / 2 + 1; //potential empty house captures are worth half
       } else {
-        lowerbound = g;
+        score += state[i]; //house seeds have standard value
       }
     }
+    score += 2*state[6]; //siloed seeds are double
 
-    return g;
+    for (int i = 7; i < 13; ++i) {
+      if ((state[i] == 0) && (state[12-i] > 0)) {
+        score -= state[12-i] / 2 + 1;
+      } else {
+        score -= state[i];
+      }
+    }
+    score -= 2*state[13];
+
+    return score;
   }
 
-  private int iterativeDeepening(int[] root) {
-    int firstguess = 0;
-
-    for (int d = 1; d < MAX_SEARCH_DEPTH; ++d) {
-      firstguess = MTDF(root, firstguess, d);
-      if (timesUp()) {
-        break;
-      }
+  /**
+   * Checks move to see if valid, and if its state hash
+   * is contained in the table.
+   */
+  private boolean validEntry(ChildMove move, long hash) {
+    if (move.move < 0) {
+      return false;
+    } else {
+      return transTable.containsKey(hash);
     }
-    return firstguess;
   }
 
-  private MoveScore alphaBetaWithMemory(MoveState state, int alpha, int beta, int depth, Ply step) {
-    int g, a, b;
-    int bestMove = 0;
-    TransEntry transState;
-    long stateHash = hash(state.state);
+  private MoveScore alphaBetaWithMemory(ChildMove move, int alpha, int beta, int depth, Ply step) {    
+    int a, b, value, bestMove = 0;
+    MoveScore searchResult;
+    TransEntry trans;
+    long hash = zobristHash(move.state);
 
-    if (transTable.containsKey(stateHash)) { //trans table lookup
-      transState = transTable.get(stateHash);
-      if (transState.depth >= depth) {
-        if (transState.lowerbound >= beta) {
-          return new MoveScore(state.move, transState.lowerbound);
+    //base case
+    if ((depth == 0) || terminal(move.state)) {
+      return new MoveScore(move.move, evaluate(move.state));
+    }
+
+    //trans table lookup
+    if (validEntry(move, hash)) {
+      trans = transTable.get(hash);
+      if (trans.depth >= depth) {
+        if (trans.lowerbound >= beta) {
+          return new MoveScore(move.move, trans.lowerbound);
         }
-        if (transState.upperbound <= alpha) {
-          return new MoveScore(state.move, transState.upperbound);
+        if (trans.upperbound <= alpha) {
+          return new MoveScore(move.move, trans.upperbound);
         }
-        alpha = Math.max(alpha, transState.lowerbound);
-        beta = Math.min(beta, transState.upperbound);
+        alpha = Math.max(alpha, trans.lowerbound);
+        beta = Math.min(beta, trans.upperbound);
       }
     }
 
-    if ((depth == 0) || terminal(state.state)) { // leaf node
-      g = evaluate(state.state);
-    } else if (step == Ply.MAX) { //MAX STEP
-      g = Integer.MIN_VALUE;
-      a = alpha; //save original alpha value
-
-      for (MoveState child : children(state.state, Ply.MAX)) {
-        if (g >= beta) break;
-        MoveScore abBest = alphaBetaWithMemory(child, a, beta, depth - 1, Ply.MIN); ////////// FIX THIS, MUST RETURN MoveScore -----------------------------------
-        if (abBest.score >= g) {
-          g = abBest.score;
+    //recursive
+    if (step == Ply.MAX) { //max step
+      value = Integer.MIN_VALUE;
+      a = alpha; //save original alpha
+      for (ChildMove child : children(move, Ply.MAX, false)) {
+        searchResult = alphaBetaWithMemory(child, a, beta, depth - 1, Ply.MIN);
+        if (searchResult.score >= value) {
+          value = searchResult.score;
           bestMove = child.move;
-          a = Math.max(a, g);
         }
+        a = Math.max(a, value);
+        if (alpha >= beta) break; //prune
       }
-
-    } else { // step == Ply.MIN //MIN STEP
-      g = Integer.MAX_VALUE;
-      b = beta; //save original beta value
-
-      for (MoveState child : children(state.state, Ply.MIN)) {
-        if (g <= alpha) break;
-        MoveScore abBest = alphaBetaWithMemory(child, alpha, b, depth - 1, Ply.MAX);
-        if (abBest.score <= g) {
-          g = Math.min(g, abBest.score);
+    } else { //min step
+      value = Integer.MAX_VALUE;
+      b = beta; //save original beta
+      for (ChildMove child : children(move, Ply.MIN, false)) {
+        searchResult = alphaBetaWithMemory(child, alpha, b, depth - 1, Ply.MAX);
+        if (searchResult.score <= value) {
+          value = searchResult.score;
           bestMove = child.move;
-          b = Math.min(b, g);
         }
+        b = Math.min(b, value);
+        if (alpha >= beta) break; //prune
       }
     }
-    //traditional transposition table storing of bounds
-    transState = transTable.getOrDefault(stateHash, new TransEntry());
-    
-    if (transState.depth <= depth) {
+
+    //store trans table values
+    trans = transTable.getOrDefault(hash, new TransEntry());
+
+    if (trans.depth <= depth) {
       //fail low implies an upper bound
-      if (g <= alpha) {
-        transState.upperbound = g;
-      }
-      //found an accurate minimax value - will not occur if called with zero window
-      if ((g > alpha) && (g < beta)) {
-        transState.lowerbound = g;
-        transState.upperbound = g;
+      if (value <= alpha) {
+        trans.upperbound = value;
       }
       //fail high implies a lower bound
-      if (g >= beta) {
-        transState.lowerbound = g;
+      else if (value >= beta) {
+        trans.lowerbound = value;
       }
-      transState.depth = depth;
-      transTable.put(stateHash, transState);
+      //accurate minimax value
+      else {
+        trans.lowerbound = value;
+        trans.upperbound = value;
+      }
+      trans.depth = depth;
+      transTable.put(hash, trans);
     }
-    return new MoveScore(bestMove, g);
+
+    return new MoveScore(bestMove, value);
+  }
+
+  private ArrayList<ChildMove> children(ChildMove parent, Ply step, boolean extraTurn) {
+    ArrayList<ChildMove> childmoves = new ArrayList<ChildMove>();
+    ChildMove child;
+
+    if (step == Ply.MAX) { //our moves
+      for (int i = 0; i < 6; ++i) {
+        if (parent.state[i] > 0) {
+          //move is valid
+          if (extraTurn) { // if extra turn, treat as same move as parent
+            child = new ChildMove(parent.move, Arrays.copyOf(parent.state, 14));
+          } else {
+            child = new ChildMove(i, Arrays.copyOf(parent.state, 14));
+          }
+          //sow seeds from i
+          int j = i;
+          int seeds = parent.state[i];
+          child.state[i] = 0;
+          while(seeds > 0) {
+            ++j;
+            j %= 14;
+            if (j < 13) { //don't place in opponent store
+              --seeds;
+              child.state[j] += 1;
+            }
+          }
+          if (j == 6) { //extra turn
+            if (terminal(child.state)) { //if move ends the game it can't give an extra turn
+              childmoves.add(child);
+            } else { //recursively find extra move children of this state
+              childmoves.addAll(children(child, step, true));
+            }
+          } else {
+            if ((j >= 0) && (j <= 5) && (child.state[j] == 1) && (child.state[12-j] > 0)) { //empty house rule
+              child.state[6] = child.state[6] + child.state[12-j] + 1;
+              child.state[j] = 0;
+              child.state[12-j] = 0;
+            }
+            childmoves.add(child);
+          }
+        }
+      }
+    } else { //enemy moves
+      for (int i = 7; i < 13; ++i) {
+        if (parent.state[i] > 0) {
+          //move is valid
+          if (extraTurn) {
+            child = new ChildMove(parent.move, Arrays.copyOf(parent.state, 14));
+          } else {
+            child = new ChildMove(i, Arrays.copyOf(parent.state, 14));
+          }
+          //sow seeds from i
+          int j = i;
+          int seeds = parent.state[i];
+          child.state[i] = 0;
+          while(seeds > 0) {
+            ++j;
+            j %= 14;
+            if (j < 6) { //don't place in our store
+              --seeds;
+              child.state[j] += 1;
+            }
+          }
+          if (j == 13) { //extra turn
+            if (terminal(child.state)) { //if move ends the game it can't give an extra turn
+              childmoves.add(child);
+            } else { //recursively find extra move children of this state
+              childmoves.addAll(children(child, step, true));
+            }
+          } else {
+            if ((j >= 7) && (j <= 12) && (child.state[j] == 1) && (child.state[12-j] > 0)) { //empty house rule
+              child.state[13] = child.state[13] + child.state[12-j] + 1;
+              child.state[j] = 0;
+              child.state[12-j] = 0;
+            }
+            childmoves.add(child);
+          }
+        }
+      }
+    }
+    return childmoves;
   }
 
   /**
@@ -304,22 +332,29 @@ public class MTDFAgent implements MancalaAgent{
    * An move from an empty house will result in a forfeit.
    * A legal move will always be available.
    * Assume your agent has 0.5 seconds to make a move. 
-   * @param state the current state of the game. 
+   * @param board the current state of the game. 
    * The board is an int array of length 14, indicating the 12 houses and 2 stores. 
    * The agent's house are 0-5 and their store is 6. The opponents houses are 7-12 and their store is 13. Board[i] is the number of seeds in house (store) i.
    * board[(i+1}%14] is the next house (store) anticlockwise from board[i].  
    * This will be consistent between moves of a normal game so the agent can maintain a strategy space.
    * @return the house the agent would like to move the seeds from this turn.
    */
-  public int move(int[] state) {
-    MoveScore bestMove = alphaBetaWithMemory(new MoveState(-1, state), Integer.MIN_VALUE, Integer.MAX_VALUE, 10, Ply.MAX);
-    return bestMove.move; 
-  }
+  public int move(int[] board) {
+    int depth = 1;
+    int guess = 0;
+    ChildMove state = new ChildMove(-10, board); // this is leaking
+    MoveScore best;
 
-  private int evalExtraTurns(int[] state) {
-    return Integer.MIN_VALUE;
-  }
+    this.searchStartTime = System.currentTimeMillis();
+    best = MTDF(state, guess, depth);
+    while ((depth < MAX_SEARCH_DEPTH) && (!timeUp())) {
+      ++depth;
+      best = MTDF(state, guess, depth);
+      guess = best.score;
+    }
 
+    return best.move;
+  }
 
   /**
    * The agents name.
