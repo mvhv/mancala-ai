@@ -50,9 +50,9 @@ public class MTDFAgent implements MancalaAgent{
     public int move;
     public int[] state;
 
-    public MoveState(int move, int child) {
+    public MoveState(int move, int[] state) {
       this.move = move;
-      this.child = state;
+      this.state = state;
     }
   }
 
@@ -99,7 +99,7 @@ public class MTDFAgent implements MancalaAgent{
       for (int i = 0; i < 6; ++i) {
         if (state[i] > 0) {
           //move is valid
-          MoveState newState = MoveState(i, Arrays.copyOf(state, 14));
+          MoveState newState = new MoveState(i, Arrays.copyOf(state, 14));
           //sow seeds from i
           int j = i;
           int seeds = state[i];
@@ -200,7 +200,7 @@ public class MTDFAgent implements MancalaAgent{
         beta = g;
       }
 
-      g = alphaBetaWithMemory(root, beta - 1, beta, d, Ply.MAX);
+      //g = alphaBetaWithMemory(root, beta - 1, beta, d, Ply.MAX);
 
       if (g < beta) {
         upperbound = g;
@@ -224,52 +224,61 @@ public class MTDFAgent implements MancalaAgent{
     return firstguess;
   }
 
-  private int alphaBetaWithMemory(int[] state, int alpha, int beta, int d, Ply step) {
+  private MoveScore alphaBetaWithMemory(MoveState state, int alpha, int beta, int depth, Ply step) {
     int g, a, b;
+    int bestMove = 0;
     TransEntry transState;
-    long stateHash = hash(state);
+    long stateHash = hash(state.state);
 
     if (transTable.containsKey(stateHash)) { //trans table lookup
       transState = transTable.get(stateHash);
-      if (transState.depth >= d) {
+      if (transState.depth >= depth) {
         if (transState.lowerbound >= beta) {
-          return transState.lowerbound;
+          return new MoveScore(state.move, transState.lowerbound);
         }
         if (transState.upperbound <= alpha) {
-          return transState.upperbound;
+          return new MoveScore(state.move, transState.upperbound);
         }
         alpha = Math.max(alpha, transState.lowerbound);
         beta = Math.min(beta, transState.upperbound);
       }
     }
 
-    if ((d == 0) || terminal(state)) { // leaf node
-      g = evaluate(state);
+    if ((depth == 0) || terminal(state.state)) { // leaf node
+      g = evaluate(state.state);
     } else if (step == Ply.MAX) { //MAX STEP
       g = Integer.MIN_VALUE;
       a = alpha; //save original alpha value
 
-      for (MoveState child : children(state, Ply.MAX)) {
+      for (MoveState child : children(state.state, Ply.MAX)) {
         if (g >= beta) break;
-        g = Math.max(g, alphaBetaWithMemory(child, a, beta, d - 1, Ply.MIN)); ////////// FIX THIS, MUST RETURN MoveScore -----------------------------------
-        a = Math.max(a, g);
+        MoveScore abBest = alphaBetaWithMemory(child, a, beta, depth - 1, Ply.MIN); ////////// FIX THIS, MUST RETURN MoveScore -----------------------------------
+        if (abBest.score >= g) {
+          g = abBest.score;
+          bestMove = child.move;
+          a = Math.max(a, g);
+        }
       }
 
     } else { // step == Ply.MIN //MIN STEP
       g = Integer.MAX_VALUE;
       b = beta; //save original beta value
 
-      for (MoveState child : children(state, Ply.MIN)) {
+      for (MoveState child : children(state.state, Ply.MIN)) {
         if (g <= alpha) break;
-        g = Math.min(g, alphaBetaWithMemory(child, alpha, b, d - 1, Ply.MAX));
-        b = Math.min(b, g);
+        MoveScore abBest = alphaBetaWithMemory(child, alpha, b, depth - 1, Ply.MAX);
+        if (abBest.score <= g) {
+          g = Math.min(g, abBest.score);
+          bestMove = child.move;
+          b = Math.min(b, g);
+        }
       }
     }
     //traditional transposition table storing of bounds
     transState = transTable.getOrDefault(stateHash, new TransEntry());
     
-    if (transState.depth >= d) {
-      //fail low result implies an upper bound
+    if (transState.depth <= depth) {
+      //fail low implies an upper bound
       if (g <= alpha) {
         transState.upperbound = g;
       }
@@ -278,14 +287,14 @@ public class MTDFAgent implements MancalaAgent{
         transState.lowerbound = g;
         transState.upperbound = g;
       }
-      //fail high result implies a lower bound
+      //fail high implies a lower bound
       if (g >= beta) {
         transState.lowerbound = g;
       }
-      transState.depth = d;
+      transState.depth = depth;
       transTable.put(stateHash, transState);
     }
-    return g;
+    return new MoveScore(bestMove, g);
   }
 
   /**
@@ -303,7 +312,8 @@ public class MTDFAgent implements MancalaAgent{
    * @return the house the agent would like to move the seeds from this turn.
    */
   public int move(int[] state) {
-
+    MoveScore bestMove = alphaBetaWithMemory(new MoveState(-1, state), Integer.MIN_VALUE, Integer.MAX_VALUE, 10, Ply.MAX);
+    return bestMove.move; 
   }
 
   private int evalExtraTurns(int[] state) {

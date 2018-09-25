@@ -102,7 +102,7 @@ public class MancalaImp implements MancalaAgent {
           //recursively find children of this state
           curr = extraTurnValue(newState, depth);
         } else {
-          if ((j >= 0) && (j <= 5) && (newState.get(j) == 1) && (newState.get(12-j)) > 0) { //empty house rule
+          if ((j >= 0) && (j <= 5) && (newState.get(j) == 1) && (newState.get(12-j) > 0)) { //empty house rule
             newState.set(6, newState.get(6) + newState.get(12-j) + 1);
             newState.set(j, 0);
             newState.set(12-j, 0);
