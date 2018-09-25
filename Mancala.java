@@ -174,7 +174,7 @@ public class Mancala{
 
   //runs a basic game between two random players
   public static void main(String[] args){
-    play(new MTDFAgent(), new RandomAgent());
+    play(new MMAgent(), new RandomAgent());
   }
 
 }
