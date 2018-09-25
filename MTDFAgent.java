@@ -12,8 +12,9 @@ import java.util.Random;
  */
 public class MTDFAgent implements MancalaAgent {
 
-  static enum Ply {MAX, MIN};
-
+  /**
+   * Inner class to hold move / score pairs
+   */
   static class MoveScore {
     public int move;
     public int score;
@@ -24,6 +25,9 @@ public class MTDFAgent implements MancalaAgent {
     }
   }
 
+  /**
+   * Inner class to hold move / child-state pairs
+   */
   static class ChildMove {
     public int move;
     public int[] state;
@@ -34,6 +38,9 @@ public class MTDFAgent implements MancalaAgent {
     }
   }
 
+  /**
+   * Inner class to hold transposition table entries
+   */
   static class TransEntry {
     public int depth;
     public int upperbound;
@@ -53,6 +60,12 @@ public class MTDFAgent implements MancalaAgent {
   private long[][] zobristTable;
   private long searchStartTime;
 
+  /**
+   * Constructs an instance of the AI agent for gameplay.
+   * 
+   * Initialises the bitstring table for Zobrist hashing
+   * and a hashtable to map transpositions. 
+   */
   public MTDFAgent() {
     //init zobrist table
     Random prng = new Random();
@@ -67,31 +80,21 @@ public class MTDFAgent implements MancalaAgent {
     transTable = new HashMap<Long, TransEntry>();
   }
 
-  private MoveScore MTDF(ChildMove state, int guess, int depth) {
-    int value, upperbound, lowerbound, beta;
-    MoveScore move = new MoveScore(-1, -1); //placeholder
-
-    value = guess;
-    upperbound = Integer.MAX_VALUE;
-    lowerbound = Integer.MIN_VALUE;
-    while (lowerbound < upperbound) {
-      beta = Math.max(value, lowerbound + 1);
-      move = alphaBetaWithMemory(state, beta - 1, beta, depth, Ply.MAX);
-      value = move.score;
-      if (value < beta) {
-        upperbound = value;
-      } else {
-        lowerbound = value;
-      }
-    }
-
-    return move;
-  }
-
+  /**
+   * Checks to see if the move timer is nearly up.
+   * 
+   * @return true if time is up, otherwise false
+   */
   private boolean timeUp() {
     return((System.currentTimeMillis() - searchStartTime) >= MAX_RUN_TIME);
   }
 
+  /**
+   * Calcuates a Zobrist hash of a game state.
+   * 
+   * @param state the game state
+   * @return the Zobrist hash of the state
+   */
   private long zobristHash(int[] state) {
     long key = 0;
     for (int i = 0; i < 14; ++i) {
@@ -100,6 +103,12 @@ public class MTDFAgent implements MancalaAgent {
     return key;
   }
 
+  /**
+   * Checks if a game state is a terminal state.
+   * 
+   * @param state the game state
+   * @return true is state is terminal, false otherwise
+   */
   private boolean terminal(int[] state) {
     //if south empty then state is terminal
     int count = 0;
@@ -115,6 +124,12 @@ public class MTDFAgent implements MancalaAgent {
     return false;
   }
 
+  /**
+   * Estimates the value of a game state.
+   * 
+   * @param state the game state
+   * @return the estimated value of the state
+   */
   private int evaluate(int[] state) {
     int score = 0;
 
@@ -155,8 +170,12 @@ public class MTDFAgent implements MancalaAgent {
   }
 
   /**
-   * Checks move to see if valid, and if its state hash
-   * is contained in the table.
+   * Checks move to see if valid, and if the corresponding state
+   * is contained in the transposition table.
+   *
+   * @param move the game move to be checked
+   * @param hash the Zobrist hash of the equivalent move state
+   * @return true if move valid and state contained in transposition table
    */
   private boolean validEntry(ChildMove move, long hash) {
     if (move.move < 0) {
@@ -166,6 +185,46 @@ public class MTDFAgent implements MancalaAgent {
     }
   }
 
+  /**
+   * Performs MTD-f search by calling many zero-width alpha-beta
+   * searches.
+   *
+   * @param state the root state to search from
+   * @param guess the first best guess of minimax value
+   * @param depth the maximum search depth
+   * @return the move corresponding to the true minimax value
+   */
+  private MoveScore MTDF(ChildMove state, int guess, int depth) {
+    int value, upperbound, lowerbound, beta;
+    MoveScore move = new MoveScore(-1, -1); //placeholder
+
+    value = guess;
+    upperbound = Integer.MAX_VALUE;
+    lowerbound = Integer.MIN_VALUE;
+    while (lowerbound < upperbound) {
+      beta = Math.max(value, lowerbound + 1);
+      move = alphaBetaWithMemory(state, beta - 1, beta, depth, Ply.MAX);
+      value = move.score;
+      if (value < beta) {
+        upperbound = value;
+      } else {
+        lowerbound = value;
+      }
+    }
+    return move;
+  }
+
+  /**
+   * Performs Minimax search using alpha-beta pruning with 
+   * transposition tables.
+   *
+   * @param move the game state to search from
+   * @param alpha the maximised lowerbound
+   * @param beta the minimised upperbound
+   * @param depth the maximum search depth
+   * @param step the current minimax step
+   * @return the move corresponding to the minimax value
+   */
   private MoveScore alphaBetaWithMemory(ChildMove move, int alpha, int beta, int depth, Ply step) {    
     int a, b, value, bestMove = 0;
     MoveScore searchResult;
@@ -243,6 +302,15 @@ public class MTDFAgent implements MancalaAgent {
     return new MoveScore(bestMove, value);
   }
 
+  /**
+   * Generates all valid child states of a move.
+   *
+   * @param parent the parent state
+   * @param step the current minimax step (the player to generate moves)
+   * @param extraTurn true if recursively calculating children for
+   * an extra turn, false otherwise
+   * @return a list of all valid child moves
+   */
   private ArrayList<ChildMove> children(ChildMove parent, Ply step, boolean extraTurn) {
     ArrayList<ChildMove> childmoves = new ArrayList<ChildMove>();
     ChildMove child;
@@ -367,7 +435,9 @@ public class MTDFAgent implements MancalaAgent {
   /**
    * A method to reset the agent for a new game.
    */
-  public void reset() {}
+  public void reset() {
+    //nuffin goes ere
+  }
 }
 
 
