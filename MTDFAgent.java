@@ -2,10 +2,12 @@ import java.util.HashMap;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Random;
+import java.util.Date;
 
 /**
  * MTD-f search implementation for Mancala
- * 
+ * Based on pseudocode from: people.csail.mit.edu/plaat/mtdf.html
+ *
  * CITS3001 Lab6
  *
  * Jesse Wyatt (20756971)
@@ -53,12 +55,14 @@ public class MTDFAgent implements MancalaAgent {
     }
   }
 
+  static enum Ply {MAX, MIN}
+
   private static int N_SEEDS = 3 * 12;
   private static int MAX_SEARCH_DEPTH = 100;
   private static long MAX_RUN_TIME = 100; //maximum runtime in milliseconds
   private HashMap<Long, TransEntry> transTable;
   private long[][] zobristTable;
-  private long searchStartTime;
+  private long searchCutoff;
 
   /**
    * Constructs an instance of the AI agent for gameplay.
@@ -86,7 +90,7 @@ public class MTDFAgent implements MancalaAgent {
    * @return true if time is up, otherwise false
    */
   private boolean timeUp() {
-    return((System.currentTimeMillis() - searchStartTime) >= MAX_RUN_TIME);
+    return(new Date().getTime() > searchCutoff);
   }
 
   /**
@@ -150,7 +154,7 @@ public class MTDFAgent implements MancalaAgent {
     //calculate board value
     for (int i = 0; i < 6; ++i) {
       if ((state[i] == 0) && (state[12-i] > 0)) { //empty house rule
-        score += state[12-i] / 2 + 1; //potential empty house captures are worth half
+        score += state[12-i]; //potential empty house captures are worth half
       } else {
         score += state[i]; //house seeds have standard value
       }
@@ -159,7 +163,7 @@ public class MTDFAgent implements MancalaAgent {
 
     for (int i = 7; i < 13; ++i) {
       if ((state[i] == 0) && (state[12-i] > 0)) {
-        score -= state[12-i] / 2 + 1;
+        score -= state[12-i];
       } else {
         score -= state[i];
       }
@@ -279,7 +283,11 @@ public class MTDFAgent implements MancalaAgent {
     }
 
     //store trans table values
-    trans = transTable.getOrDefault(hash, new TransEntry());
+    if (transTable.containsKey(hash)) { //no getOrDefault in Java 1.5
+      trans = transTable.get(hash);
+    } else {
+      trans = new TransEntry();
+    }
 
     if (trans.depth <= depth) {
       //fail low implies an upper bound
@@ -331,7 +339,7 @@ public class MTDFAgent implements MancalaAgent {
           while(seeds > 0) {
             ++j;
             j %= 14;
-            if (j < 13) { //don't place in opponent store
+            if (j != 13) { //don't place in opponent store
               --seeds;
               child.state[j] += 1;
             }
@@ -368,7 +376,7 @@ public class MTDFAgent implements MancalaAgent {
           while(seeds > 0) {
             ++j;
             j %= 14;
-            if (j < 6) { //don't place in our store
+            if (j != 6) { //don't place in our store
               --seeds;
               child.state[j] += 1;
             }
@@ -413,7 +421,7 @@ public class MTDFAgent implements MancalaAgent {
     ChildMove state = new ChildMove(-10, board); // this is leaking
     MoveScore best;
 
-    this.searchStartTime = System.currentTimeMillis();
+    this.searchCutoff = new Date().getTime() + MAX_RUN_TIME;
     best = MTDF(state, guess, depth);
     while ((depth < MAX_SEARCH_DEPTH) && (!timeUp())) {
       ++depth;
