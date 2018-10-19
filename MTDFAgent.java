@@ -150,7 +150,7 @@ public class MTDFAgent implements MancalaAgent {
       } else {
         return 0; //draw
       }
-    } else
+    }
 
     //calculate board value
     for (int i = 0; i < 6; ++i) {
